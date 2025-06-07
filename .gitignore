@@ -13,3 +13,6 @@ venv/
 .Dockerfile
 ./api_server/api_router.py
 ./config/config.py
+
+config/
+mategen_runtime.log
