@@ -808,8 +808,6 @@ def download_files_and_create_kb(client, file_info_json):
     return vector_id
 
 
-
-
 def clean_and_convert_to_json(raw_str):
     """
     清理并将不规则的字符串转换为满足JSON格式要求的字符串
