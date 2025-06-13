@@ -15,6 +15,7 @@
   #kb-upload { display:none; margin-top:1rem; }
 </style>
 </head>
+
 <body>
 <div id="container">
   <aside id="sidebar">
@@ -42,17 +43,36 @@
       <textarea id="chat-input" rows="3" placeholder="Say something…"></textarea><br>
       <button onclick="sendChat()">Send</button>
     </section>
-      
+
+    <section id="kb-section" style="display:none;">
+      <h2>Knowledge Bases</h2>
+      <ul id="kb-list"></ul>
+    </section>
   </main>
 </div>
 
 <script>
 // ------------------ 初始化 ---------------------
+async function initializeForge(options = {}) {
+  const res = await fetch('/api/initialize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options)
+  });
+  const data = await res.json();
+  if (data.status === 200 && data.data?.thread_id) {
+    currentThreadId = data.data.thread_id;
+  }
+  return data;
+}
+
 async function checkInitialization() {
   const res = await fetch('/api/check_initialization');
   const data = await res.json();
+  // 这里其实还有状态码400的处理逻辑没有写，此时应该跳转到API_Key弹窗页面，调用/api/set_api_key。后面补上
   if (data.status === 200) {
     document.getElementById('init-section').style.display = 'none';
+    await initializeForge();
     loadConversations();
   }
 }
@@ -67,6 +87,7 @@ async function saveApiKey() {
   document.getElementById('init-msg').textContent = data.data?.message || '';
   if (data.status === 200) {
     document.getElementById('init-section').style.display = 'none';
+    await initializeMateGen();
     loadConversations();
   }
 }
@@ -143,6 +164,7 @@ async function sendChat() {
       if (data.text) addMessage('BOT: ' + data.text);
     });
   }
+  loadConversations();
 }
 
 // ------------------ 知识库上传 -----------------
