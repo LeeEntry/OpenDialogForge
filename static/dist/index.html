@@ -87,7 +87,7 @@ async function saveApiKey() {
   document.getElementById('init-msg').textContent = data.data?.message || '';
   if (data.status === 200) {
     document.getElementById('init-section').style.display = 'none';
-    await initializeMateGen();
+    await initializeForge();
     loadConversations();
   }
 }
@@ -118,8 +118,8 @@ async function selectConversation(id) {
   const data = await res.json();
   if (data.status === 200) {
     data.data.message.forEach(msg => {
-      addMessage(`USER: ${msg.question}`);
-      addMessage(`BOT: ${msg.response}`);
+      addMessage(`USER: ${msg.user}`);
+      addMessage(`BOT: ${msg.assistant}`);
     });
   }
 }
