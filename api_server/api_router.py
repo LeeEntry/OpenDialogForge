@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from fastapi.staticfiles import StaticFiles
-from fastapi import HTTPException, Body
 import uvicorn
 import json
 import argparse
@@ -229,7 +227,7 @@ def mount_app_routes(app: FastAPI):
                         async for text in stream.text_deltas:
                             full_text += text
 
-                            yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\\n\\n"
+                            yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
                             # yield json.dumps({'text': text}, ensure_ascii=False)
                         yield "event: end\n\n"
                         await stream.until_done()
@@ -276,7 +274,6 @@ def mount_app_routes(app: FastAPI):
 
                     db_session.commit()  # 提交事务
                     db_session.close()
-
                 else:
                     await cache_instance["async_client"].beta.threads.messages.create(
                         thread_id=thread_id,
@@ -291,14 +288,14 @@ def mount_app_routes(app: FastAPI):
                     ) as stream:
                         async for text in stream.text_deltas:
                             full_text += text
-                            yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\\n\\n"
+                            yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
                             # yield json.dumps({'text': text}, ensure_ascii=False)
 
                         if full_text == '':
                             text = await cache_instance["async_client"].beta.threads.messages.list(thread_id=thread_id)
                             for text in text.data[0].content[0].text.value:
                                 full_text += text
-                                yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\\n\\n"
+                                yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
                                 # yield json.dumps({'text': text}, ensure_ascii=False)
                         yield "event: end\n\n"
                         await stream.until_done()
@@ -349,8 +346,13 @@ def mount_app_routes(app: FastAPI):
 
             # 使用SSE 流式处理
             event_response = EventSourceResponse(
-                event_generator(cache_instance, thread_id, query, code_type, run_result))
-            event_response.headers.update({"Content-Type": "text/event-stream;data:text/plain"})
+                event_generator(cache_instance, thread_id, query, code_type, run_result),
+                headers={
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
             return event_response
 
         except Exception as e:

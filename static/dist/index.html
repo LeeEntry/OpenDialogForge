@@ -14,6 +14,7 @@
   #chat-input { width:100%; }
   #kb-upload { display:none; margin-top:1rem; }
 </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
@@ -128,10 +129,12 @@ async function selectConversation(id) {
 function addMessage(text) {
   const box = document.getElementById('messages');
   const div = document.createElement('div');
-  div.textContent = text;
+  // 使用 marked 将消息内容渲染为 Markdown
+  div.innerHTML = marked.parse(text);
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 }
+
 async function sendChat() {
   const question = document.getElementById('chat-input').value;
   document.getElementById('chat-input').value = '';
@@ -155,17 +158,36 @@ async function sendChat() {
     const { value, done } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value);
-    const parts = buffer.split('\n\n');
+    const parts = buffer.split(/\r?\n\r?\n/);
     buffer = parts.pop();
     parts.forEach(chunk => {
-      const payload = chunk.replace(/^data: /, '');
+      chunk = chunk.trim();
+      const payload = chunk.replace(/^data:\s*/, '');
       if (payload === 'event: end') return;
       const data = JSON.parse(payload);
       if (data.text) addMessage('BOT: ' + data.text);
     });
   }
-  loadConversations();
+  await loadConversations();
 }
+
+// function sendChat() {
+//   const q = document.getElementById('chat-input').value;
+//   addMessage('USER: ' + q);
+//   document.getElementById('chat-input').value = '';
+//
+//   const es = new EventSource('/api/chat?thread_id=' + currentThreadId +
+//                              '&query=' + encodeURIComponent(q) +
+//                              '&code_type=chat&chat_stream=true');
+//
+//   es.onmessage = e => {
+//     const { text } = JSON.parse(e.data);
+//     if (text) addMessage('BOT: ' + text);
+//   };
+//
+//   es.onerror = () => es.close();   // 收到 event: end 后，后端会关连接
+// }
+
 
 // ------------------ 知识库上传 -----------------
 async function uploadKnowledge() {
