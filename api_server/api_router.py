@@ -230,8 +230,8 @@ def mount_app_routes(app: FastAPI):
                         async for text in stream.text_deltas:
                             full_text += text
 
-                            # yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
-                            yield json.dumps({'text': text}, ensure_ascii=False)
+                            yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
+                            # yield json.dumps({'text': text}, ensure_ascii=False)
                         yield "event: end\n\n"
                         await stream.until_done()
 
@@ -292,15 +292,15 @@ def mount_app_routes(app: FastAPI):
                     ) as stream:
                         async for text in stream.text_deltas:
                             full_text += text
-                            # yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
-                            yield json.dumps({'text': text}, ensure_ascii=False)
+                            yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
+                            # yield json.dumps({'text': text}, ensure_ascii=False)
 
                         if full_text == '':
                             text = await cache_instance["async_client"].beta.threads.messages.list(thread_id=thread_id)
                             for text in text.data[0].content[0].text.value:
                                 full_text += text
-                                # yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
-                                yield json.dumps({'text': text}, ensure_ascii=False)
+                                yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
+                                # yield json.dumps({'text': text}, ensure_ascii=False)
                         yield "event: end\n\n"
                         await stream.until_done()
 
