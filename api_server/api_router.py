@@ -351,7 +351,7 @@ def mount_app_routes(app: FastAPI):
             # 使用SSE 流式处理
             event_response = EventSourceResponse(
                 event_generator(cache_instance, thread_id, query, code_type, run_result))
-            event_response.headers.update({"Content-Type": "text/event-stream;data:text/plain"})
+            event_response.headers.update({"Content-Type": "text/event-stream"})
             return event_response
 
         except Exception as e:
