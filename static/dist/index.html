@@ -1,229 +1,643 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>MateGen Frontend</title>
-<style>
-  body { margin:0; font-family: Arial, sans-serif; height:100vh; }
-  #container { display:flex; height:100%; }
-  #sidebar { width:20%; border-right:1px solid #ccc; padding:10px; overflow-y:auto; }
-  #main { flex:1; padding:20px; overflow-y:auto; }
-  section { margin-bottom:2rem; }
-  ul { list-style:none; padding:0; }
-  #messages { border:1px solid #ccc; height:200px; overflow-y:auto; padding:10px; }
-  #chat-input { width:100%; }
-  #kb-upload { display:none; margin-top:1rem; }
-</style>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <meta charset="UTF-8">
+    <title>MateGen Frontend</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            height: 100vh;
+        }
+
+        #container {
+            display: flex;
+            height: 100%;
+        }
+
+        #sidebar {
+            width: 20%;
+            border-right: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: auto;
+        }
+
+        #main {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        section {
+            margin-bottom: 2rem;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        #messages {
+            border: 1px solid #ccc;
+            height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        #chat-input {
+            width: 100%;
+        }
+
+        #kb-upload {
+            display: none;
+            margin-top: 1rem;
+        }
+
+        .bot-stream-container {
+            /* pre-wrap: 保留文本中的空格和换行符，但允许长行自动换行 */
+            white-space: pre-wrap;
+
+            /* word-break: 允许在任意字符间断开长单词/链接，防止撑破容器 */
+            word-break: break-all;
+
+            /* 使用等宽字体，看起来更像代码或日志 */
+            font-family: Consolas, 'Courier New', monospace;
+
+            /* 可以给它一个浅色的背景，以区别于普通消息 */
+            background-color: #f7f7f7;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 5px;
+            margin-bottom: 5px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 
 <body>
 <div id="container">
-  <aside id="sidebar">
-    <h2>会话</h2>
-    <ul id="conversations"></ul>
-    <button id="kb-toggle">知识库</button>
-    <div id="kb-upload">
-      <input id="kb-name" placeholder="New KB name">
-      <input id="kb-file" type="file" multiple>
-      <button onclick="uploadKnowledge()">Upload</button>
-    </div>
-  </aside>
+    <aside id="sidebar">
+        <h2>会话</h2>
+        <ul id="conversations"></ul>
+        <button id="kb-toggle">知识库</button>
+        <div id="kb-upload">
+            <input id="kb-name" placeholder="New KB name">
+            <input id="kb-file" type="file" multiple>
+            <button onclick="uploadKnowledge()">Upload</button>
+        </div>
+    </aside>
 
-  <main id="main">
-    <section id="init-section">
-      <h2>API Key</h2>
-      <input id="api-key" placeholder="Enter API key">
-      <button onclick="saveApiKey()">Save</button>
-      <div id="init-msg"></div>
-    </section>
+    <main id="main">
+        <section id="init-section">
+            <h2>API Key</h2>
+            <input id="api-key" placeholder="Enter API key">
+            <button onclick="saveApiKey()">Save</button>
+            <div id="init-msg"></div>
+        </section>
 
-    <section id="chat-section" style="display:none;">
-      <h2>Chat</h2>
-      <div id="messages"></div>
-      <textarea id="chat-input" rows="3" placeholder="Say something…"></textarea><br>
-      <button onclick="sendChat()">Send</button>
-    </section>
+        <section id="chat-section" style="display:none;">
+            <h2>Chat</h2>
+            <div id="messages"></div>
+            <textarea id="chat-input" rows="3" placeholder="Say something…"></textarea><br>
+            <button onclick="sendChat()">Send</button>
+        </section>
 
-    <section id="kb-section" style="display:none;">
-      <h2>Knowledge Bases</h2>
-      <ul id="kb-list"></ul>
-    </section>
-  </main>
+        <section id="kb-section" style="display:none;">
+            <h2>Knowledge Bases</h2>
+            <ul id="kb-list"></ul>
+        </section>
+    </main>
 </div>
 
 <script>
-// ------------------ 初始化 ---------------------
-async function initializeForge(options = {}) {
-  const res = await fetch('/api/initialize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(options)
-  });
-  const data = await res.json();
-  if (data.status === 200 && data.data?.thread_id) {
-    currentThreadId = data.data.thread_id;
-  }
-  return data;
-}
+    // ------------------ 初始化 ---------------------
+    async function initializeForge(options = {}) {
+        const res = await fetch('/api/initialize', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(options)
+        });
+        const data = await res.json();
+        if (data.status === 200 && data.data?.thread_id) {
+            currentThreadId = data.data.thread_id;
+        }
+        return data;
+    }
 
-async function checkInitialization() {
-  const res = await fetch('/api/check_initialization');
-  const data = await res.json();
-  // 这里其实还有状态码400的处理逻辑没有写，此时应该跳转到API_Key弹窗页面，调用/api/set_api_key。后面补上
-  if (data.status === 200) {
-    document.getElementById('init-section').style.display = 'none';
-    await initializeForge();
-    loadConversations();
-  }
-}
-async function saveApiKey() {
-  const key = document.getElementById('api-key').value;
-  const res = await fetch('/api/set_api_key', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ api_key: key })
-  });
-  const data = await res.json();
-  document.getElementById('init-msg').textContent = data.data?.message || '';
-  if (data.status === 200) {
-    document.getElementById('init-section').style.display = 'none';
-    await initializeForge();
-    loadConversations();
-  }
-}
+    async function checkInitialization() {
+        const res = await fetch('/api/check_initialization');
+        const data = await res.json();
+        // 这里其实还有状态码400的处理逻辑没有写，此时应该跳转到API_Key弹窗页面，调用/api/set_api_key。后面补上
+        if (data.status === 200) {
+            document.getElementById('init-section').style.display = 'none';
+            await initializeForge();
+            loadConversations();
+        }
+    }
 
-// ------------------ 会话管理 -------------------
-let currentThreadId = null;
-async function loadConversations() {
-  const res = await fetch('/api/conversation');
-  const data = await res.json();
-  if (data.status === 200) {
-    const list = document.getElementById('conversations');
-    list.innerHTML = '';
-    data.data.message.forEach(c => {
-      const li = document.createElement('li');
-      li.textContent = c.conversation_name;
-      li.onclick = () => selectConversation(c.id);
-      list.appendChild(li);
+    async function saveApiKey() {
+        const key = document.getElementById('api-key').value;
+        const res = await fetch('/api/set_api_key', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({api_key: key})
+        });
+        const data = await res.json();
+        document.getElementById('init-msg').textContent = data.data?.message || '';
+        if (data.status === 200) {
+            document.getElementById('init-section').style.display = 'none';
+            await initializeForge();
+            loadConversations();
+        }
+    }
+
+    // ------------------ 会话管理 -------------------
+    let currentThreadId = null;
+
+    async function loadConversations() {
+        const res = await fetch('/api/conversation');
+        const data = await res.json();
+        if (data.status === 200) {
+            const list = document.getElementById('conversations');
+            list.innerHTML = '';
+            data.data.message.forEach(c => {
+                const li = document.createElement('li');
+                li.textContent = c.conversation_name;
+                li.onclick = () => selectConversation(c.id);
+                list.appendChild(li);
+            });
+            document.getElementById('chat-section').style.display = '';
+            document.getElementById('kb-section').style.display = '';
+            loadKnowledgeBases();
+        }
+    }
+
+    async function selectConversation(id) {
+        currentThreadId = id;
+        document.getElementById('messages').innerHTML = '';
+        const res = await fetch(`/api/messages?thread_id=${id}`);
+        const data = await res.json();
+        if (data.status === 200) {
+            data.data.message.forEach(msg => {
+                addMessage(`USER: ${msg.user}`);
+                addMessage(`BOT: ${msg.assistant}`);
+            });
+        }
+    }
+
+    // ------------------ 聊天与流式输出 -------------
+    function addMessage(text) {
+        const box = document.getElementById('messages');
+        const div = document.createElement('div');
+        // 使用 marked 将消息内容渲染为 Markdown
+        div.innerHTML = marked.parse(text);
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    // async function sendChat() {
+    //   const question = document.getElementById('chat-input').value;
+    //   document.getElementById('chat-input').value = '';
+    //
+    //   const res = await fetch('/api/chat', {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify({
+    //       query: question,
+    //       thread_id: currentThreadId,
+    //       code_type: 'chat',
+    //       chat_stream: true
+    //     })
+    //   });
+    //
+    //   const reader = res.body.getReader();
+    //   const decoder = new TextDecoder();
+    //   addMessage('USER: ' + question);
+    //   let buffer = '';
+    //   let endStream = false;
+    //   while (true) {
+    //     const { value, done } = await reader.read();
+    //     if (done) break;
+    //     buffer += decoder.decode(value);
+    //     const parts = buffer.split(/\r?\n\r?\n/);
+    //     buffer = parts.pop();
+    //     parts.forEach(chunk => {
+    //       const payload = chunk.replace(/^data: /, '').trim();
+    //       if (payload === 'event: end') {
+    //         endStream = true;
+    //         return;
+    //       }
+    //       const data = JSON.parse(payload);
+    //       if (data.text) addMessage('BOT: ' + data.text);
+    //     });
+    //     if (endStream) break;
+    //   }
+    //   reader.cancel();
+    //   await loadConversations();
+    // }
+
+    // V1
+
+    // async function sendChat() {
+    //     const question = document.getElementById('chat-input').value;
+    //     if (!question.trim()) {
+    //         return;
+    //     }
+    //
+    //     addMessage(`USER: ${question}`);
+    //     document.getElementById('chat-input').value = '';
+    //
+    //     const res = await fetch('/api/chat', {
+    //         method: 'POST',
+    //         headers: {'Content-Type': 'application/json'},
+    //         body: JSON.stringify({
+    //             query: question,
+    //             thread_id: currentThreadId,
+    //             code_type: 'chat',
+    //             chat_stream: true
+    //         })
+    //     });
+    //
+    //     if (!res.ok) {
+    //         addMessage('BOT: 抱歉，服务出现了错误。');
+    //         return;
+    //     }
+    //
+    //     const messagesBox = document.getElementById('messages');
+    //     const botMessageContainer = document.createElement('div');
+    //     messagesBox.appendChild(botMessageContainer);
+    //
+    //     let botResponseText = 'BOT: ';
+    //     botMessageContainer.innerHTML = marked.parse(botResponseText);
+    //     messagesBox.scrollTop = messagesBox.scrollHeight;
+    //
+    //     const reader = res.body.getReader();
+    //     const decoder = new TextDecoder("utf-8");
+    //     let buffer = '';
+    //
+    //     console.log("--- 开始接收数据流 ---");
+    //
+    //     while (true) {
+    //         const {done, value} = await reader.read();
+    //         if (done) {
+    //             buffer += decoder.decode(value, {stream: true});
+    //             const lines = buffer.split('\n\n');
+    //             buffer = lines.pop();
+    //
+    //             lines.forEach(line => {
+    //                 // 1. 打印原始行数据
+    //                 console.log("原始行:", JSON.stringify(line));
+    //
+    //                 if (line.startsWith('data: ')) {
+    //                     const dataString = line.substring(6).trim();
+    //
+    //                     // 2. 打印清理后的数据字符串
+    //                     console.log("清理后的数据字符串:", dataString);
+    //
+    //                     if (dataString && dataString !== "[DONE]") {
+    //                         try {
+    //                             const jsonData = JSON.parse(dataString);
+    //
+    //                             // 3. 打印解析后的JSON对象
+    //                             console.log("解析后的JSON对象:", jsonData);
+    //
+    //                             if (jsonData.text) {
+    //                                 // 4. 打印即将追加的文本
+    //                                 console.log("即将追加的文本:", jsonData.text);
+    //
+    //                                 botResponseText += jsonData.text;
+    //
+    //                                 const htmlToRender = marked.parse(botResponseText);
+    //
+    //                                 // 5. 打印即将渲染的HTML
+    //                                 console.log("即将渲染的HTML:", htmlToRender);
+    //
+    //                                 botMessageContainer.innerHTML = htmlToRender;
+    //                                 messagesBox.scrollTop = messagesBox.scrollHeight;
+    //                             } else {
+    //                                 console.warn("JSON对象中没有 'text' 字段:", jsonData);
+    //                             }
+    //                         } catch (e) {
+    //                             console.error("解析JSON时出错:", e, "错误的字符串是:", dataString);
+    //                         }
+    //                     }
+    //                 }
+    //             });
+    //             console.log("--- 数据流结束 ---");
+    //             break;
+    //         }
+    //
+    //     }
+    // }
+
+    // V2
+
+    // async function sendChat() {
+    //     const question = document.getElementById('chat-input').value;
+    //     if (!question.trim()) {
+    //         return;
+    //     }
+    //
+    //     // 这部分不变
+    //     addMessage(`USER: ${question}`);
+    //     document.getElementById('chat-input').value = '';
+    //
+    //     const res = await fetch('/api/chat', {
+    //         method: 'POST',
+    //         headers: {'Content-Type': 'application/json'},
+    //         body: JSON.stringify({
+    //             query: question,
+    //             thread_id: currentThreadId,
+    //             code_type: 'chat',
+    //             chat_stream: true
+    //         })
+    //     });
+    //
+    //     if (!res.ok) {
+    //         addMessage('BOT: 抱歉，服务出现了错误。');
+    //         return;
+    //     }
+    //
+    //     // 这部分也不变
+    //     const messagesBox = document.getElementById('messages');
+    //     const botMessageContainer = document.createElement('div');
+    //     messagesBox.appendChild(botMessageContainer);
+    //     botMessageContainer.innerHTML = marked.parse('BOT: '); // 先显示 "BOT: "
+    //     messagesBox.scrollTop = messagesBox.scrollHeight;
+    //
+    //     const reader = res.body.getReader();
+    //     const decoder = new TextDecoder("utf-8");
+    //     let buffer = '';
+    //
+    //
+    //     // 1. 循环只负责接收数据并累加到 buffer
+    //     while (true) {
+    //         const {done, value} = await reader.read();
+    //         if (done) {
+    //             break; // 流结束，退出循环
+    //         }
+    //         buffer += decoder.decode(value, {stream: true});
+    //     }
+    //
+    //     // 2. 循环结束后，统一处理整个 buffer 中的所有数据
+    //     console.log("接收到的完整数据流:", JSON.stringify(buffer));
+    //
+    //     const lines = buffer.split('\n\n');
+    //     let botResponseText = '';
+    //
+    //     lines.forEach(line => {
+    //         if (line.startsWith('data: ')) {
+    //             const dataString = line.substring(6).trim();
+    //             if (dataString && dataString !== "[DONE]") { // [DONE] 是OpenAI的结束标志
+    //                 try {
+    //                     const jsonData = JSON.parse(dataString);
+    //                     if (jsonData.text) {
+    //                         botResponseText += jsonData.text;
+    //                     }
+    //                 } catch (e) {
+    //                     console.error("解析JSON时出错:", e, "错误的字符串是:", dataString);
+    //                 }
+    //             }
+    //         } else if (line.startsWith('event: end')) { // 兼容您后端可能发送的结束事件
+    //             console.log("捕获到 event: end");
+    //         }
+    //     });
+    //
+    //     // 3. 将拼接好的完整文本一次性渲染到页面
+    //     if (botResponseText) {
+    //         botMessageContainer.innerHTML = marked.parse('BOT: ' + botResponseText);
+    //         messagesBox.scrollTop = messagesBox.scrollHeight;
+    //     } else {
+    //         // 如果没有解析出任何文本，可能需要一个错误提示
+    //         console.error("数据流中没有解析出任何有效文本。");
+    //         if (!botMessageContainer.innerText.replace('BOT:', '').trim()) {
+    //             botMessageContainer.innerHTML = marked.parse('BOT: (收到了空响应)');
+    //         }
+    //     }
+    //     // ===== 核心修正区域结束 =====
+    // }
+
+    // 辅助函数：转义HTML特殊字符，防止浏览器误将文本内容当作HTML标签渲染
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    // V3
+
+    // async function sendChat() {
+    //     const question = document.getElementById('chat-input').value;
+    //     if (!question.trim()) {
+    //         return;
+    //     }
+    //
+    //     // 1. 显示用户自己的问题
+    //     addMessage(`USER: ${question}`);
+    //     document.getElementById('chat-input').value = '';
+    //
+    //     // 2. 发起 fetch 请求 (这部分不变)
+    //     const res = await fetch('/api/chat', {
+    //         method: 'POST',
+    //         headers: {'Content-Type': 'application/json'},
+    //         body: JSON.stringify({
+    //             query: question,
+    //             thread_id: currentThreadId,
+    //             code_type: 'chat',
+    //             chat_stream: true
+    //         })
+    //     });
+    //
+    //     if (!res.ok) {
+    //         addMessage('BOT: 抱歉，服务出现了错误。');
+    //         return;
+    //     }
+    //
+    //     // 3. 准备一个专用于显示流式响应的容器
+    //     const messagesBox = document.getElementById('messages');
+    //     const botMessageContainer = document.createElement('div');
+    //
+    //     // 给这个容器添加一个特殊的CSS类，方便我们后续设置样式
+    //     botMessageContainer.className = 'bot-stream-container';
+    //
+    //     // 先显示一个 "BOT: " 的前缀
+    //     botMessageContainer.innerHTML = 'BOT: ';
+    //     messagesBox.appendChild(botMessageContainer);
+    //     messagesBox.scrollTop = messagesBox.scrollHeight;
+    //
+    //     // 4. 【核心修改】实时读取并显示流
+    //     const reader = res.body.getReader();
+    //     const decoder = new TextDecoder("utf-8");
+    //
+    //     while (true) {
+    //         const {done, value} = await reader.read();
+    //         if (done) {
+    //             break; // 当数据流结束时，退出循环
+    //         }
+    //
+    //         // 将收到的二进制数据块解码为文本
+    //         const textChunk = decoder.decode(value, {stream: true});
+    //
+    //         // 【关键】将解码后的文本块转义后，直接追加到容器的末尾
+    //         // 我们使用 escapeHtml 来确保 < > 等符号被当成纯文本显示
+    //         botMessageContainer.innerHTML += escapeHtml(textChunk);
+    //
+    //         // 实时滚动到底部
+    //         messagesBox.scrollTop = messagesBox.scrollHeight;
+    //     }
+    // }
+
+    async function sendChat() {
+        const question = document.getElementById('chat-input').value;
+        if (!question.trim()) {
+            return;
+        }
+
+        addMessage(`USER: ${question}`);
+        document.getElementById('chat-input').value = '';
+
+        const messagesBox = document.getElementById('messages');
+        const botMessageContainer = document.createElement('div');
+        messagesBox.appendChild(botMessageContainer);
+
+        let botResponseText = 'BOT: ';
+        botMessageContainer.innerHTML = marked.parse(botResponseText); // 先显示 "BOT: "
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    query: question,
+                    thread_id: currentThreadId,
+                    code_type: 'chat',
+                    chat_stream: true
+                })
+            });
+
+            if (!res.ok) {
+                addMessage('BOT: 抱歉，服务出现了错误。');
+                return;
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder("utf-8"); // 确保使用 UTF-8 解码
+            let buffer = '';
+
+            console.log("--- 开始接收数据流 ---");
+
+            while (true) {
+                const {done, value} = await reader.read();
+                if (done) {
+                    console.log("--- 数据流结束 ---");
+                    break; // 数据流结束
+                }
+                buffer += decoder.decode(value, {stream: true}); // 渐进式解码
+
+                // 使用正则表达式分割缓冲区，处理 \n\n 或 \r\n\r\n 作为事件分隔符
+                // parts 数组将包含所有完整的事件块，最后一个元素可能是未完成的事件
+                const parts = buffer.split(/\r?\n\r?\n/);
+                buffer = parts.pop(); // 将最后一个（可能不完整的）部分保留在 buffer 中，以便下次读取时继续处理
+
+                // 遍历并处理所有完整的事件块
+                parts.forEach(chunk => {
+                    const trimmedChunk = chunk.trim();
+                    if (!trimmedChunk) return; // 忽略因分割产生的空块
+
+                    // SSE事件块内部可能包含多行，例如 'data: ...\ndata: ...'
+                    // 因此我们需要再次按单行分割，并过滤掉空行
+                    const lines = trimmedChunk.split('\n').filter(line => line.trim() !== '');
+
+                    lines.forEach(line => {
+                        const processedLine = line.trim();
+                        console.log("原始行:", JSON.stringify(processedLine)); // 调试输出：打印每一条处理的行
+
+                        if (processedLine.startsWith('data: ')) {
+                            let dataPayload = processedLine.substring(5).trim(); // 移除第一个 'data: '
+
+                            // 循环移除所有可能的 'data: ' 前缀（处理例如 'data: data:' 的情况）
+                            while (dataPayload.startsWith('data: ')) {
+                                dataPayload = dataPayload.substring(5).trim();
+                            }
+
+                            // 检查是否是 'event: end' 被错误地包装在 'data:' 中
+                            if (dataPayload === 'event: end') {
+                                console.log("捕获到 data: event: end");
+                                // 这是一个结束信号，不需要 JSON 解析
+                            } else if (dataPayload && dataPayload !== "[DONE]") { // [DONE] 是某些模型的结束标志
+                                try {
+                                    const jsonData = JSON.parse(dataPayload);
+                                    console.log("解析后的JSON对象:", jsonData); // 调试输出
+                                    if (jsonData.text) {
+                                        botResponseText += jsonData.text;
+                                        // 实时更新前端显示
+                                        botMessageContainer.innerHTML = marked.parse(botResponseText);
+                                        messagesBox.scrollTop = messagesBox.scrollHeight;
+                                    } else {
+                                        console.warn("JSON对象中没有 'text' 字段:", jsonData);
+                                    }
+                                } catch (e) {
+                                    console.error("解析JSON时出错:", e, "错误的字符串是:", dataPayload);
+                                }
+                            }
+                        } else if (processedLine.startsWith('event: end')) {
+                            // 正确处理 'event: end' 事件
+                            console.log("捕获到 event: end");
+                            // 这是一个结束信号，不需要 JSON 解析
+                        }
+                        // 可以添加其他 else 块来处理或忽略未知格式的行
+                    });
+                });
+            }
+        } catch (error) {
+            console.error("Fetch API 错误:", error);
+            addMessage('BOT: 抱歉，连接服务器时出现错误。');
+        } finally {
+            // 对话结束后，重新加载会话列表或执行其他清理工作
+            await loadConversations();
+        }
+    }
+
+    // ------------------ 知识库上传 -----------------
+    async function uploadKnowledge() {
+        const kbName = document.getElementById('kb-name').value;
+        const files = document.getElementById('kb-file').files;
+        const formData = new FormData();
+        formData.append('folderName', kbName);
+        [...files].forEach(f => formData.append('files', f));
+        const res = await fetch('/api/upload', {method: 'POST', body: formData});
+        const data = await res.json();
+        alert(data.data?.message || 'Upload completed');
+        loadKnowledgeBases();
+    }
+
+    async function loadKnowledgeBases() {
+        const res = await fetch('/api/get_all_knowledge');
+        const data = await res.json();
+        if (data.status === 200) {
+            const list = document.getElementById('kb-list');
+            list.innerHTML = '';
+            data.data.forEach(kb => {
+                const li = document.createElement('li');
+                li.textContent = kb.display_knowledge_base_name;
+                list.appendChild(li);
+            });
+        }
+    }
+
+    // ------------------ 知识库面板开关 -------------
+    const kbToggle = document.getElementById('kb-toggle');
+    kbToggle.addEventListener('click', () => {
+        const panel = document.getElementById('kb-upload');
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     });
-    document.getElementById('chat-section').style.display = '';
-    document.getElementById('kb-section').style.display = '';
-    loadKnowledgeBases();
-  }
-}
-async function selectConversation(id) {
-  currentThreadId = id;
-  document.getElementById('messages').innerHTML = '';
-  const res = await fetch(`/api/messages?thread_id=${id}`);
-  const data = await res.json();
-  if (data.status === 200) {
-    data.data.message.forEach(msg => {
-      addMessage(`USER: ${msg.user}`);
-      addMessage(`BOT: ${msg.assistant}`);
-    });
-  }
-}
 
-// ------------------ 聊天与流式输出 -------------
-function addMessage(text) {
-  const box = document.getElementById('messages');
-  const div = document.createElement('div');
-  // 使用 marked 将消息内容渲染为 Markdown
-  div.innerHTML = marked.parse(text);
-  box.appendChild(div);
-  box.scrollTop = box.scrollHeight;
-}
-
-async function sendChat() {
-  const question = document.getElementById('chat-input').value;
-  document.getElementById('chat-input').value = '';
-
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query: question,
-      thread_id: currentThreadId,
-      code_type: 'chat',
-      chat_stream: true
-    })
-  });
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  addMessage('USER: ' + question);
-  let buffer = '';
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value);
-    const parts = buffer.split(/\r?\n\r?\n/);
-    buffer = parts.pop();
-    parts.forEach(chunk => {
-      chunk = chunk.trim();
-      const payload = chunk.replace(/^data:\s*/, '');
-      if (payload === 'event: end') return;
-      const data = JSON.parse(payload);
-      if (data.text) addMessage('BOT: ' + data.text);
-    });
-  }
-  await loadConversations();
-}
-
-// function sendChat() {
-//   const q = document.getElementById('chat-input').value;
-//   addMessage('USER: ' + q);
-//   document.getElementById('chat-input').value = '';
-//
-//   const es = new EventSource('/api/chat?thread_id=' + currentThreadId +
-//                              '&query=' + encodeURIComponent(q) +
-//                              '&code_type=chat&chat_stream=true');
-//
-//   es.onmessage = e => {
-//     const { text } = JSON.parse(e.data);
-//     if (text) addMessage('BOT: ' + text);
-//   };
-//
-//   es.onerror = () => es.close();   // 收到 event: end 后，后端会关连接
-// }
-
-
-// ------------------ 知识库上传 -----------------
-async function uploadKnowledge() {
-  const kbName = document.getElementById('kb-name').value;
-  const files = document.getElementById('kb-file').files;
-  const formData = new FormData();
-  formData.append('folderName', kbName);
-  [...files].forEach(f => formData.append('files', f));
-  const res = await fetch('/api/upload', { method: 'POST', body: formData });
-  const data = await res.json();
-  alert(data.data?.message || 'Upload completed');
-  loadKnowledgeBases();
-}
-async function loadKnowledgeBases() {
-  const res = await fetch('/api/get_all_knowledge');
-  const data = await res.json();
-  if (data.status === 200) {
-    const list = document.getElementById('kb-list');
-    list.innerHTML = '';
-    data.data.forEach(kb => {
-      const li = document.createElement('li');
-      li.textContent = kb.display_knowledge_base_name;
-      list.appendChild(li);
-    });
-  }
-}
-
-// ------------------ 知识库面板开关 -------------
-const kbToggle = document.getElementById('kb-toggle');
-kbToggle.addEventListener('click', () => {
-  const panel = document.getElementById('kb-upload');
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-});
-
-// ------------------ 页面启动 -------------------
-checkInitialization();
+    // ------------------ 页面启动 -------------------
+    checkInitialization();
 </script>
 </body>
 </html>
