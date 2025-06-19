@@ -18,12 +18,6 @@ import requests
 
 import pandas as pd
 import html2text
-
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-dotenv_path = os.path.join(BASE_DIR, '.env')
-load_dotenv(dotenv_path)
 from openai import OpenAI
 
 from typing_extensions import override
@@ -49,12 +43,14 @@ from server.agent.create_assistant import generate_assistant
 from config.config import assistant_instructions
 from tools.tool_desc import python_tool_desc, sql_tool_desc
 import logging
+from config.config import setup_logging
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-
+dotenv_path = os.path.join(BASE_DIR, '.env')
+load_dotenv(dotenv_path)
 
 logging.basicConfig(level=logging.INFO)
-from config.config import setup_logging
 
 # # 调用函数来设置日志
 setup_logging()

@@ -1,38 +1,38 @@
 # -*- coding: utf-8 -*-
 
-from fastapi.staticfiles import StaticFiles
-import uvicorn
-import json
 import argparse
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
-from pydantic import BaseModel
-from fastapi import Query
-from fastapi.responses import RedirectResponse
-from mategen.mategen_class import create_knowledge_base
-from fastapi import FastAPI, File, UploadFile, Form
-from typing import List
+import json
+import os
 import shutil
-from server.utils import (SessionLocal,
-                          check_and_initialize_db,
-                          upsert_agent_by_user_id,
-                          )
-from server.identity_verification.utils import validate_api_key
-from mategen.mategen_class import MateGenClass
+from typing import List
+
+import uvicorn
+from dotenv import load_dotenv, find_dotenv
+from fastapi import FastAPI, File, UploadFile, Form
+from fastapi import HTTPException, Body
+from fastapi import Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from sqlalchemy import func
+from sqlalchemy import text
 from sse_starlette.sse import EventSourceResponse
-from mategen.mategen_class import EventHandler
+
 from db.base_model import (KnowledgeBase,
                            DbBase,
                            MessageModel,
                            ThreadModel,
                            )
-from sqlalchemy import func
-import os
-from dotenv import load_dotenv, find_dotenv
 from db.init_db import initialize_database
-import traceback
-import logging
-from fastapi import HTTPException, Body
+from mategen.mategen_class import EventHandler
+from mategen.mategen_class import MateGenClass
+from mategen.mategen_class import create_knowledge_base
+from server.identity_verification.utils import validate_api_key
+from server.utils import (SessionLocal,
+                          check_and_initialize_db,
+                          upsert_agent_by_user_id,
+                          )
 
 load_dotenv(find_dotenv())
 
@@ -144,13 +144,13 @@ def mount_app_routes(app: FastAPI):
             # 判断是否是有效的 API Key
             if not validate_api_key(api_key):
                 return {"status": 400, "data": {"message": "您输入的 API Key 无效。"}}
-    
+
             # 存储用户加密后的 API_KEY
             if upsert_agent_by_user_id(db_session, api_key, user_id='fufankongjian'):
                 return {"status": 200, "data": {"message": "您输入的 API Key 已生效。"}}
-    
+
             return {"status": 500, "data": {"message": "您输入的 API Key 无效。"}}
-    
+
         except Exception:
             raise HTTPException(status_code=500, detail="服务器内部异常，请稍后重试。")
         finally:
@@ -197,9 +197,13 @@ def mount_app_routes(app: FastAPI):
                    db_name_id: str = Body(None, description="数据库的id", embed=True), ):
 
         cache_pool = MateGenClass.get_cache_pool()
+        # 从缓存池中获取特定用户（这里硬编码为 'fufankongjian'）的资源实例。
+        # 这个实例可能包含 OpenAI 客户端、助手ID等。
         cache_instance = cache_pool.get_user_resources(user_id='fufankongjian')
         try:
+            # 这个函数将负责生成 SSE 事件（即流式响应的每个数据块）
             async def event_generator(cache_instance, thread_id, query, code_type, run_result):
+                # 创建一个数据库会话。`SessionLocal` ，是 SQLAlchemy 会话工厂
                 db_session = SessionLocal()
                 # 用来保留完整的模型回答
                 full_text = ''
@@ -275,28 +279,40 @@ def mount_app_routes(app: FastAPI):
                     db_session.commit()  # 提交事务
                     db_session.close()
                 else:
+                    # 使用 OpenAI API 的异步客户端 (`async_client`)，在指定 `thread_id` 的对话线程中，
+                    # 以 "user" 角色创建一条新消息，内容就是用户输入的 `query`。这是将用户的普通聊天消息发送给模型。
                     await cache_instance["async_client"].beta.threads.messages.create(
                         thread_id=thread_id,
                         role="user",
                         content=query,
                     )
+
                     async with cache_instance["async_client"].beta.threads.runs.stream(
                             thread_id=thread_id,
                             assistant_id=cache_instance["assistant_id"],
                             event_handler=EventHandler(),
 
-                    ) as stream:
+                    ) as stream:  # 启动一个异步运行流（Run Stream），用于从 OpenAI Assistant API 获取流式响应。
+                        # 异步遍历流中产生的文本增量（deltas）。
                         async for text in stream.text_deltas:
                             full_text += text
+                            # 这是一个关键的 SSE 响应行。每次 `yield` 都会向前端发送一个数据块。
+                            # `json.dumps({'text': text}, ensure_ascii=False)` 将文本片段包装成 JSON 格式，并确保中文字符不被转义。
+                            # `\n\n` 是 SSE 协议规定的事件分隔符。
                             yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
-                            # yield json.dumps({'text': text}, ensure_ascii=False)
 
+                        # 如果 `full_text` 在流结束后仍然为空（即模型没有直接返回文本片段）。
+                        # 这可能发生在模型执行工具调用（Tool Call）或需要进一步处理的情况下，
+                        # 导致直接的文本流为空，但最终会话中会有回复。
                         if full_text == '':
+                            # 从 OpenAI API 获取指定 `thread_id` 的所有消息列表。
                             text = await cache_instance["async_client"].beta.threads.messages.list(thread_id=thread_id)
+                            # 遍历最新消息的文本内容。
+                            # `text.data[0]` 获取最新的消息对象，`content[0]` 通常是文本内容部分，
+                            # `text.value` 则是实际的文本字符串。
                             for text in text.data[0].content[0].text.value:
                                 full_text += text
                                 yield f"data: {json.dumps({'text': text}, ensure_ascii=False)}\n\n"
-                                # yield json.dumps({'text': text}, ensure_ascii=False)
                         yield "event: end\n\n"
                         await stream.until_done()
 
@@ -320,6 +336,9 @@ def mount_app_routes(app: FastAPI):
                         if db_info:
                             database_name = db_info.database_name
 
+                    # 创建一个新的 `MessageModel` 实例，用于存储当前会话的详细信息。
+                    # 这包括会话ID、用户问题、模型的完整回复、消息类型、运行结果（对于普通聊天通常为空），
+                    # 以及关联的知识库和数据库信息（如果存在）。
                     new_message = MessageModel(
                         thread_id=thread_id,
                         question=query,
@@ -332,9 +351,11 @@ def mount_app_routes(app: FastAPI):
                         db_name=database_name,
                     )
 
+                    # 将新的消息记录添加到数据库会话中。
                     db_session.add(new_message)
 
                     # 更新关联的线程更新时间
+                    # 从数据库中查询与当前会话关联的线程（ThreadModel）记录。
                     thread = db_session.query(ThreadModel).filter_by(id=thread_id).first()
                     if thread:
                         thread.updated_at = func.now()  # 使用 SQLAlchemy 的 func.now() 确保数据库时间一致性
@@ -868,7 +889,7 @@ def run_api(host, port):
     uvicorn.run(app,
                 host=host,
                 port=port,
-    )
+                )
 
 
 if __name__ == '__main__':
