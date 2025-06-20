@@ -6,9 +6,11 @@
 """
 
 import uuid
-from sqlalchemy import create_engine, Column, String, ForeignKey, DateTime, Text, Integer, Boolean
-from sqlalchemy.orm import relationship, declarative_base
+
+from sqlalchemy import Column, String, ForeignKey, DateTime, Text, Integer, Boolean
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+
 from db.base import Base
 
 
@@ -31,19 +33,46 @@ class SecretModel(Base):
     threads = relationship("ThreadModel", back_populates="agent", cascade="all, delete-orphan")
 
 
+class MessageModel(Base):
+    """
+    该表存储与对话线程相关的消息记录，包括用户的问题、代理的响应及消息类型。
+    """
+    __tablename__ = 'messages'
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    thread_id = Column(String(255), ForeignKey('threads.id'))  # 外键关联到 ThreadModel
+    question = Column(Text)  # 消息发送者的标识（例如 'user', 'agent' 等）
+    response = Column(Text)  # 消息内容
+    created_at = Column(DateTime(timezone=True), server_default=func.now())  # 消息创建时间自动生成
+
+    message_type = Column(String(255))  # 消息类型，例如 'chat', 'python', 'sql'等
+    run_result = Column(Text, nullable=True)  # 执行结果，可用于存储代码执行或命令的输出，此字段可以为空
+
+    knowledge_id = Column(String(36))
+    knowledge_name = Column(String(255))
+    db_id = Column(String(255))
+    db_name = Column(String(255))
+
+    # 反向关系，可以通过 ThreadModel 直接访问其所有消息
+    thread = relationship("ThreadModel", back_populates="messages")
+
+
+# 用户和大模型对话过程中可以新建多个会话，每个会话都是对应一个新的线程，也就是ThreadModel表中的一行
 class ThreadModel(Base):
     """
     该表存储会话线程的信息，每个线程关联一个代理，并可能包含多个消息和知识库。
     """
     __tablename__ = 'threads'
     id = Column(String(255), primary_key=True)
-    agent_id = Column(String(255), ForeignKey('agents.assis_id'))
+    agent_id = Column(String(255), ForeignKey('agents.assis_id'))  # 一个OpenAI API Key对应一个Assistant
     conversation_name = Column(String(255))
     run_mode = Column(String(255))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())  # 消息更新时间
 
-    # 反向关系到 MessageModel
+    # 这里是SQLAlchemy的ORM语法，用于建立表之间的“一对多”关系。
+    # back_populates = "thread"表示这个关系是双向的
+    # MessageModel的thread属性与这里的messages相关联
     messages = relationship("MessageModel", back_populates="thread", order_by="MessageModel.created_at")
 
     # 其他的关系定义
@@ -112,30 +141,3 @@ class DbBase(Base):
     password = Column(String(255), nullable=False)
     database_name = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=func.now())  # 自动生成创建时间
-
-
-class MessageModel(Base):
-    """
-    该表存储与对话线程相关的消息记录，包括用户的问题、代理的响应及消息类型。
-    """
-    __tablename__ = 'messages'
-
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    thread_id = Column(String(255), ForeignKey('threads.id'))  # 外键关联到 ThreadModel
-    question = Column(Text)  # 消息发送者的标识（例如 'user', 'agent' 等）
-    response = Column(Text)  # 消息内容
-    created_at = Column(DateTime(timezone=True), server_default=func.now())  # 消息创建时间自动生成
-
-    message_type = Column(String(255))  # 消息类型，例如 'chat', 'python', 'sql'等
-    run_result = Column(Text, nullable=True)  # 执行结果，可用于存储代码执行或命令的输出，此字段可以为空
-
-    knowledge_id = Column(String(36))
-    knowledge_name = Column(String(255))
-    db_id = Column(String(255))
-    db_name = Column(String(255))
-
-    # 反向关系，可以通过 ThreadModel 直接访问其所有消息
-    thread = relationship("ThreadModel", back_populates="messages")
-
-
-

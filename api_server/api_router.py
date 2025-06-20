@@ -12,8 +12,6 @@ from fastapi import FastAPI, File, UploadFile, Form
 from fastapi import HTTPException, Body
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy import text
@@ -95,16 +93,17 @@ def create_app():
     mount_app_routes(app)
 
     # 重定向到 index.html
-    @app.get("/", include_in_schema=False)
-    def read_root():
-        return RedirectResponse(url='/index.html')
-
-    # 挂载 前端 项目构建的前端静态文件夹 (对接前端静态文件的入口)
-    if os.getenv("USE_DOCKER") == "True":
-        app.mount("/", StaticFiles(directory="/app/static/dist"), name="static")
-    else:
-        app.mount("/", StaticFiles(directory="../static/dist"), name="static")
-    return app
+    # @app.get("/", include_in_schema=False)
+    # def read_root():
+    #     return RedirectResponse(url='/index.html')
+    #
+    # # 挂载 前端 项目构建的前端静态文件夹 (对接前端静态文件的入口)
+    # if os.getenv("USE_DOCKER") == "True":
+    #     app.mount("/", StaticFiles(directory="/app/static/dist"), name="static")
+    # else:
+    #     # 设置为"/"意味着所有未被其他路由匹配的请求，都会尝试在静态文件目录中查找
+    #     app.mount("/", StaticFiles(directory="../static/dist"), name="static")
+    # return app
 
 
 def mount_app_routes(app: FastAPI):
@@ -196,6 +195,7 @@ def mount_app_routes(app: FastAPI):
                    knowledge_base_name_id: str = Body(None, description="知识库的id", embed=True),
                    db_name_id: str = Body(None, description="数据库的id", embed=True), ):
 
+        # 返回一个CachePool实例
         cache_pool = MateGenClass.get_cache_pool()
         # 从缓存池中获取特定用户（这里硬编码为 'fufankongjian'）的资源实例。
         # 这个实例可能包含 OpenAI 客户端、助手ID等。
@@ -203,7 +203,7 @@ def mount_app_routes(app: FastAPI):
         try:
             # 这个函数将负责生成 SSE 事件（即流式响应的每个数据块）
             async def event_generator(cache_instance, thread_id, query, code_type, run_result):
-                # 创建一个数据库会话。`SessionLocal` ，是 SQLAlchemy 会话工厂
+                # 创建一个数据库会话。`SessionLocal` ，是 SQLAlchemy 的sessionmaker实例
                 db_session = SessionLocal()
                 # 用来保留完整的模型回答
                 full_text = ''

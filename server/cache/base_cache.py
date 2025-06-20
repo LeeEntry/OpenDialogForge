@@ -1,11 +1,9 @@
-from collections import defaultdict
-from openai import OpenAI  # 确保已导入 OpenAI
-
 def generate_instance_key(enhanced_mode, knowledge_base_chat, knowledge_base_name_id, db_name_id):
     """生成一个基于传入参数的唯一键"""
     return f"{enhanced_mode}-{knowledge_base_chat}-{knowledge_base_name_id}-{db_name_id}"
 
-class CachePool():
+
+class CachePool:
     def __init__(self):
         self.assistants = {}
         self.threads = {}
