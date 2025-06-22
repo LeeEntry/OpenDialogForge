@@ -78,7 +78,7 @@ class SQLExecutionRequest(BaseModel):
 
 def create_app():
     app = FastAPI(
-        title="MateGen API Server",
+        title="OpenDialogForge API Server",
     )
 
     app.add_middleware(
